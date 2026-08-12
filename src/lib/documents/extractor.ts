@@ -13,16 +13,11 @@ export async function extractTextFromFile(
   const fileBuffer = await fs.readFile(filePath);
 
   if (mimeType === "application/pdf" || filePath.endsWith(".pdf")) {
-    // Polyfill DOMMatrix for node environment if missing
-    if (typeof globalThis.DOMMatrix === "undefined") {
-      // @ts-expect-error polyfill for pdf-parse in Node runtime
-      globalThis.DOMMatrix = class DOMMatrix {};
-    }
-
-    // Lazy load pdf-parse inside function execution
+    // Require direct lib file to bypass pdf-parse index.js debug test file loader
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse");
-    const data = await pdfParse(fileBuffer);
+    const parsePdf = require("pdf-parse/lib/pdf-parse.js");
+    const data = await parsePdf(fileBuffer);
+
     return {
       text: cleanExtractedText(data.text),
       pageCount: data.numpages || 1,
