@@ -12,6 +12,7 @@ import {
   FileCode,
   HardDrive,
 } from "lucide-react";
+import { ReindexButton } from "@/components/documents/reindex-button";
 
 export default async function DocumentDetailPage({
   params,
@@ -75,21 +76,24 @@ export default async function DocumentDetailPage({
             </div>
           </div>
 
-          <span
-            className={`self-start md:self-center text-xs px-3.5 py-1.5 rounded-full font-medium flex items-center gap-1.5 ${
-              doc.status === "INDEXED"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : doc.status === "PROCESSING"
-                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                : doc.status === "FAILED"
-                ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                : "bg-slate-800 text-slate-400"
-            }`}
-          >
-            {doc.status === "INDEXED" && <CheckCircle2 className="w-4 h-4" />}
-            {doc.status === "FAILED" && <AlertCircle className="w-4 h-4" />}
-            <span>Status: {doc.status}</span>
-          </span>
+          <div className="flex items-center gap-3 self-start md:self-center">
+            <ReindexButton documentId={doc.id} />
+            <span
+              className={`text-xs px-3.5 py-2 rounded-xl font-medium flex items-center gap-1.5 ${
+                doc.status === "INDEXED"
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : doc.status === "PROCESSING"
+                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  : doc.status === "FAILED"
+                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              {doc.status === "INDEXED" && <CheckCircle2 className="w-4 h-4" />}
+              {doc.status === "FAILED" && <AlertCircle className="w-4 h-4" />}
+              <span>Status: {doc.status}</span>
+            </span>
+          </div>
         </div>
       </div>
 

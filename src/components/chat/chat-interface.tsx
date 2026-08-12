@@ -133,18 +133,29 @@ export function ChatInterface({
     setInputMessage("");
     setIsSending(true);
 
-    // Optimistic User Message
-    const tempUserMsg: MessageItem = {
-      id: `temp_user_${Date.now()}`,
-      role: "user",
-      content: userText,
-      createdAt: new Date().toISOString(),
-    };
+    const userMsgId = `user_${Date.now()}`;
+    const assistantMsgId = `assistant_${Date.now()}`;
 
-    setMessages((prev) => [...prev, tempUserMsg]);
+    // Add User Message & Empty Assistant Message for streaming
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMsgId,
+        role: "user",
+        content: userText,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        citations: [],
+        createdAt: new Date().toISOString(),
+      },
+    ]);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -154,17 +165,62 @@ export function ChatInterface({
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (!conversationId && data.conversationId) {
-          router.push(`/chat/${data.conversationId}`);
-        } else {
-          setMessages((prev) => [...prev, data.assistantMessage]);
-          fetchConversations();
+      if (!res.ok || !res.body) {
+        throw new Error("Stream response failed");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+      let newConvId = conversationId;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunkText = decoder.decode(value, { stream: true });
+        const lines = chunkText.split("\n\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.replace("data: ", ""));
+              if (data.type === "meta" && data.conversationId) {
+                newConvId = data.conversationId;
+              } else if (data.type === "token" && data.text) {
+                accumulatedText += data.text;
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, content: accumulatedText }
+                      : msg
+                  )
+                );
+              } else if (data.type === "done") {
+                if (data.citations) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMsgId
+                        ? { ...msg, citations: data.citations }
+                        : msg
+                    )
+                  );
+                }
+              }
+            } catch {
+              // Ignore partial JSON parse errors
+            }
+          }
         }
       }
+
+      if (!conversationId && newConvId) {
+        router.push(`/chat/${newConvId}`);
+      } else {
+        fetchConversations();
+      }
     } catch (err) {
-      console.error("Chat send error:", err);
+      console.error("Chat streaming error:", err);
     } finally {
       setIsSending(false);
     }
@@ -260,7 +316,7 @@ export function ChatInterface({
             </div>
             <div>
               <h2 className="font-bold text-white text-sm">Contextly RAG Assistant</h2>
-              <p className="text-[11px] text-slate-400">Grounded AI with Source Citations</p>
+              <p className="text-[11px] text-slate-400">Live Real-time Streaming & Source Citations</p>
             </div>
           </div>
 
@@ -321,7 +377,12 @@ export function ChatInterface({
                     }`}
                   >
                     <div className="leading-relaxed whitespace-pre-wrap font-sans">
-                      {msg.content}
+                      {msg.content || (
+                        <span className="inline-flex items-center gap-1 text-slate-400 text-xs animate-pulse">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                          <span>Generating stream...</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Source Citations Section */}
@@ -367,7 +428,7 @@ export function ChatInterface({
                     )}
 
                     {/* Copy Action */}
-                    {!isUser && (
+                    {!isUser && msg.content && (
                       <div className="flex justify-end pt-1">
                         <button
                           onClick={() => handleCopyText(msg.content, msg.id)}
@@ -391,15 +452,6 @@ export function ChatInterface({
                 </div>
               );
             })
-          )}
-
-          {isSending && (
-            <div className="flex items-center gap-3 text-slate-400 text-xs py-2">
-              <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-                <Loader2 className="w-4 h-4 animate-spin" />
-              </div>
-              <span className="animate-pulse">Retrieving relevant chunks & generating answer...</span>
-            </div>
           )}
 
           <div ref={messagesEndRef} />
